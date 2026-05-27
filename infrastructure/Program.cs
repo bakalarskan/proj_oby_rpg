@@ -19,7 +19,8 @@ namespace lab_game.infrastructure
             GameLog.SetLogger(logger);
             string logPath = logger.LogFilePath;
 
-            IGameView view = new ConsoleView();
+            ConsoleView consoleView = new ConsoleView();
+            IGameView view = consoleView;
             IDungeonTheme theme = ThemeFactory.CreateRandom();
             IBuilder mapBuilder = new ConcreteBuilder(theme);
             Director director = new Director();
@@ -51,7 +52,17 @@ namespace lab_game.infrastructure
             {
                 ClientHost client = new ClientHost(host, port);
                 GameModelDto dto = client.ConnectAndReceiveInitialState();
-                Console.WriteLine($"Połączono z serwerem. Otrzymano stan gry: {dto.Players.Count} graczy.");
+
+                consoleView.Render(dto);
+
+                client.StartReceiveLoop(update =>
+                {
+                    if (update.State != null)
+                    {
+                        consoleView.Render(update.State);
+                    }
+                });
+
                 Console.WriteLine("Naciśnij dowolny klawisz, aby zakończyć.");
                 Console.ReadKey(true);
                 client.Disconnect();
@@ -128,6 +139,18 @@ namespace lab_game.infrastructure
 
                 ConsoleKeyInfo keyInfo = Console.ReadKey(true);
                 controller.HandleInput(keyInfo.Key, localPlayer, board, localState);
+
+                if (server != null)
+                {
+                    PlayerActionDto action = new PlayerActionDto
+                    {
+                        PlayerName = localPlayer.Name,
+                        Key = keyInfo.Key.ToString()
+                    };
+                    server.BroadcastAction(action);
+                    server.BroadcastState();
+                }
+
                 while (Console.KeyAvailable)
                 {
                     Console.ReadKey(true);
