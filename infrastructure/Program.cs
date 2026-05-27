@@ -1,6 +1,8 @@
 ﻿using System.Text;
-using lab_game.model;
 using lab_game.controller;
+using lab_game.dto;
+using lab_game.model;
+using lab_game.network;
 using lab_game.view;
 
 namespace lab_game.infrastructure
@@ -42,6 +44,27 @@ namespace lab_game.infrastructure
                 { "wyrzuć przedmiot z plecaka", input.GetKeysForDescription("wyrzuć przedmiot z plecaka") },
                 { "wybierz przedmiot", input.GetKeysForDescription("wybierz przedmiot") }
             };
+
+            StartupMode mode = GetMode(args, out string host, out int port);
+
+            if (mode == StartupMode.Client)
+            {
+                ClientHost client = new ClientHost(host, port);
+                GameModelDto dto = client.ConnectAndReceiveInitialState();
+                Console.WriteLine($"Połączono z serwerem. Otrzymano stan gry: {dto.Players.Count} graczy.");
+                Console.WriteLine("Naciśnij dowolny klawisz, aby zakończyć.");
+                Console.ReadKey(true);
+                client.Disconnect();
+                return;
+            }
+
+            ServerHost? server = null;
+            if (mode == StartupMode.Server)
+            {
+                server = new ServerHost(model, port);
+                server.Start();
+            }
+
             IGameController controller = new LocalController(model, input);
 
             Console.OutputEncoding = Encoding.UTF8;
@@ -115,6 +138,51 @@ namespace lab_game.infrastructure
             view.Render(model, localState, currInstructions_end);
 
             view.PrintOutro(logPath);
+
+            server?.Stop();
+        }
+
+        private static StartupMode GetMode(string[] args, out string host, out int port)
+        {
+            host = "127.0.0.1";
+            port = 5555;
+
+            if (args.Length >= 1 && args[0].Equals("-server", StringComparison.OrdinalIgnoreCase))
+            {
+                if (args.Length >= 2 && int.TryParse(args[1], out int parsed))
+                {
+                    port = parsed;
+                }
+                return StartupMode.Server;
+            }
+
+            if (args.Length >= 1 && args[0].Equals("-client", StringComparison.OrdinalIgnoreCase))
+            {
+                if (args.Length >= 2)
+                {
+                    string[] parts = args[1].Split(':');
+                    if (parts.Length == 2)
+                    {
+                        host = parts[0];
+                        int.TryParse(parts[1], out port);
+                    }
+                }
+                return StartupMode.Client;
+            }
+
+            Console.WriteLine("Uruchomić jako (S)erwer czy (K)lient?");
+            ConsoleKey key = Console.ReadKey(true).Key;
+            if (key == ConsoleKey.K)
+            {
+                return StartupMode.Client;
+            }
+            return StartupMode.Server;
+        }
+
+        private enum StartupMode
+        {
+            Server,
+            Client
         }
     }
 }
