@@ -1,6 +1,4 @@
-﻿using System.Collections.Generic;
-
-namespace lab_game.model
+﻿namespace lab_game.model
 {
     public class Player
     {
@@ -45,6 +43,11 @@ namespace lab_game.model
             Coins = 0;
             ECTS_points = 0;
             Health = _startHealth;
+        }
+
+        public void SetSymbol(char symbol)
+        {
+            Symbol = symbol;
         }
 
         public void GetPoint(int amount)

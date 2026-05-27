@@ -29,6 +29,9 @@ namespace lab_game.model
         public abstract int GetDefense(IAttackStrategy s, Player p);
         public virtual int SoundRange => 0;
         public virtual string SoundType => "brak";
+        public virtual string Category => "Item";
+        public virtual IEnumerable<string> GetEffectNames() => new List<string>();
+        public virtual Item GetBaseItem() => this;
     }
     public abstract class Currency : Item
     {
@@ -36,6 +39,8 @@ namespace lab_game.model
         public override bool IsTwoHanded => false;
         public abstract int Value { get; }
         public override bool IsUsable => true;
+        public override string Category => "Currency";
+
         public override void Accept(IVisitor visitor)
         {
             visitor.Visit(this);
@@ -47,6 +52,8 @@ namespace lab_game.model
         public override bool IsTwoHanded => false;
         public override int Damage => 0;
         public override bool IsUsable => true;
+        public override string Category => "Currency";
+
         public override void PickUp(Player p, Board b)
         {
             p.Inventory.Add(this);
@@ -62,6 +69,8 @@ namespace lab_game.model
     {
         public override bool IsUsable => true;
         public override string Stat => $" (+{this.Damage})";
+        public override string Category => "Weapon";
+
         public override void PickUp(Player p, Board b)
         {
             p.Inventory.Add(this);

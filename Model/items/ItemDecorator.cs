@@ -27,6 +27,11 @@ namespace lab_game.model
         public override string Stat => _item.Stat;
         public override int SoundRange => _item.SoundRange;
         public override string SoundType => _item.SoundType;
+        public override string Category => _item.Category;
+
+        public override Item GetBaseItem() => _item.GetBaseItem();
+        public override IEnumerable<string> GetEffectNames() => _item.GetEffectNames();
+
         public override void PickUp(Player p, Board b)
         {
             p.Inventory.Add(this);
@@ -50,12 +55,16 @@ namespace lab_game.model
             return _item.GetDefense(s, p);
         }
     }
+
     public class Unlucky : ItemDecorator
     {
         public Unlucky(Item item) : base(item) { }
         public override string Name => $"{_item.Name} (Pechowy)";
         public override int LuckBonus => _item.LuckBonus - 5;
+        public override IEnumerable<string> GetEffectNames()
+            => new List<string>(_item.GetEffectNames()) { "Pechowy" };
     }
+
     public class Strong : ItemDecorator
     {
         private const int DamageBonus = 5;
@@ -63,5 +72,7 @@ namespace lab_game.model
         public override string Name => $"{_item.Name} (Silny)";
         public override int Damage => _item.Damage + 5;
         public override string Stat => $" (+{Damage})";
+        public override IEnumerable<string> GetEffectNames()
+            => new List<string>(_item.GetEffectNames()) { "Silny" };
     }
 }

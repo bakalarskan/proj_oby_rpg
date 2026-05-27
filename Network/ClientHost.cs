@@ -1,6 +1,5 @@
 ﻿using System;
 using System.Net.Sockets;
-using System.Threading;
 using System.Threading.Tasks;
 using lab_game.dto;
 
@@ -45,6 +44,18 @@ namespace lab_game.network
                     onUpdate(update);
                 }
             });
+        }
+
+        public void SendAction(PlayerActionDto action)
+        {
+            if (_client == null)
+            {
+                throw new InvalidOperationException("Brak połączenia z serwerem.");
+            }
+
+            NetworkUpdateDto update = NetworkUpdateSerializer.CreateAction(action);
+            string json = NetworkUpdateSerializer.Serialize(update);
+            NetworkMessage.SendJson(_client.GetStream(), json);
         }
 
         public void Disconnect()

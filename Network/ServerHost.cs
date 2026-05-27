@@ -1,4 +1,4 @@
-﻿using System;
+﻿using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Net;
 using System.Net.Sockets;
@@ -14,7 +14,10 @@ namespace lab_game.network
         private const int MaxClients = 9;
         private readonly TcpListener _listener;
         private readonly List<TcpClient> _clients = new List<TcpClient>();
+        private readonly Dictionary<TcpClient, Player> _clientPlayers = new Dictionary<TcpClient, Player>();
+        private readonly Dictionary<TcpClient, int> _clientSlots = new Dictionary<TcpClient, int>();
         private readonly GameModel _model;
+        private readonly ConcurrentQueue<PlayerActionDto> _actions = new ConcurrentQueue<PlayerActionDto>();
         private CancellationTokenSource? _cts;
 
         public ServerHost(GameModel model, int port)
@@ -41,12 +44,23 @@ namespace lab_game.network
                     c.Close();
                 }
                 _clients.Clear();
+                _clientPlayers.Clear();
+                _clientSlots.Clear();
             }
+        }
+
+        public bool TryDequeueAction(out PlayerActionDto action)
+        {
+            return _actions.TryDequeue(out action);
         }
 
         public void BroadcastState()
         {
-            NetworkUpdateDto update = NetworkUpdateSerializer.CreateState(_model);
+            NetworkUpdateDto update;
+            lock (_model)
+            {
+                update = NetworkUpdateSerializer.CreateState(_model);
+            }
             string json = NetworkUpdateSerializer.Serialize(update);
             SendToAll(json);
         }
@@ -63,6 +77,7 @@ namespace lab_game.network
             while (!token.IsCancellationRequested)
             {
                 TcpClient client = _listener.AcceptTcpClient();
+                Player player;
                 lock (_clients)
                 {
                     if (_clients.Count >= MaxClients)
@@ -70,14 +85,98 @@ namespace lab_game.network
                         client.Close();
                         continue;
                     }
+
                     _clients.Add(client);
+                    int slot = GetNextSlot();
+                    _clientSlots[client] = slot;
+
+                    player = CreatePlayer(slot);
+                    _clientPlayers[client] = player;
+                }
+
+                lock (_model)
+                {
+                    _model.AddPlayer(player);
                 }
 
                 NetworkStream stream = client.GetStream();
-                NetworkUpdateDto update = NetworkUpdateSerializer.CreateState(_model);
+                NetworkUpdateDto update;
+                lock (_model)
+                {
+                    update = NetworkUpdateSerializer.CreateState(_model);
+                }
                 string json = NetworkUpdateSerializer.Serialize(update);
                 NetworkMessage.SendJson(stream, json);
+
+                BroadcastState();
+                Task.Run(() => ClientLoop(client, player, token));
             }
+        }
+
+        private void ClientLoop(TcpClient client, Player player, CancellationToken token)
+        {
+            try
+            {
+                NetworkStream stream = client.GetStream();
+                while (!token.IsCancellationRequested && client.Connected)
+                {
+                    string json = NetworkMessage.ReceiveJson(stream);
+                    NetworkUpdateDto update = NetworkUpdateSerializer.Deserialize(json);
+                    if (update.Action != null)
+                    {
+                        update.Action.PlayerName = player.Name;
+                        _actions.Enqueue(update.Action);
+                    }
+                }
+            }
+            catch
+            {
+                // rozłączenie klienta
+            }
+            finally
+            {
+                Player? removedPlayer = null;
+                lock (_clients)
+                {
+                    _clients.Remove(client);
+                    if (_clientPlayers.TryGetValue(client, out Player playerToRemove))
+                    {
+                        removedPlayer = playerToRemove;
+                        _clientPlayers.Remove(client);
+                    }
+                    _clientSlots.Remove(client);
+                }
+
+                if (removedPlayer != null)
+                {
+                    lock (_model)
+                    {
+                        _model.RemovePlayer(removedPlayer);
+                    }
+                    BroadcastState();
+                }
+
+                client.Close();
+            }
+        }
+
+        private int GetNextSlot()
+        {
+            for (int i = 1; i <= MaxClients; i++)
+            {
+                if (!_clientSlots.Values.Contains(i))
+                {
+                    return i;
+                }
+            }
+            return MaxClients;
+        }
+
+        private static Player CreatePlayer(int slot)
+        {
+            Player player = new Player($"Gracz {slot}");
+            player.SetSymbol((char)('0' + slot));
+            return player;
         }
 
         private void SendToAll(string json)

@@ -32,6 +32,11 @@ namespace lab_game.infrastructure
             Board board = model.Board;
             LocalModel localState = new LocalModel();
 
+            Dictionary<string, LocalModel> playerLocalStates = new Dictionary<string, LocalModel>
+            {
+                [localPlayer.Name] = localState
+            };
+
             GameKeys input = new GameKeys();
             Dictionary<string, string> keyMap = new Dictionary<string, string>
             {
@@ -48,25 +53,22 @@ namespace lab_game.infrastructure
 
             StartupMode mode = GetMode(args, out string host, out int port);
 
+            ClientHost? client = null;
+            GameModelDto? latestState = null;
             if (mode == StartupMode.Client)
             {
-                ClientHost client = new ClientHost(host, port);
-                GameModelDto dto = client.ConnectAndReceiveInitialState();
-
-                consoleView.Render(dto);
+                client = new ClientHost(host, port);
+                latestState = client.ConnectAndReceiveInitialState();
+                consoleView.Render(latestState);
 
                 client.StartReceiveLoop(update =>
                 {
                     if (update.State != null)
                     {
+                        latestState = update.State;
                         consoleView.Render(update.State);
                     }
                 });
-
-                Console.WriteLine("Naciśnij dowolny klawisz, aby zakończyć.");
-                Console.ReadKey(true);
-                client.Disconnect();
-                return;
             }
 
             ServerHost? server = null;
@@ -76,7 +78,22 @@ namespace lab_game.infrastructure
                 server.Start();
             }
 
-            IGameController controller = new LocalController(model, input);
+            IGameController controller = mode == StartupMode.Client
+                ? new NetworkController(key =>
+                {
+                    if (client == null)
+                    {
+                        return;
+                    }
+
+                    PlayerActionDto action = new PlayerActionDto
+                    {
+                        PlayerName = config.PlayerName,
+                        Key = key.ToString()
+                    };
+                    client.SendAction(action);
+                })
+                : new LocalController(model, input);
 
             Console.OutputEncoding = Encoding.UTF8;
             Console.CursorVisible = false;
@@ -86,37 +103,60 @@ namespace lab_game.infrastructure
                 Console.SetBufferSize(100, 38);
             }
 
-            InstructionVisitor instructionVisitor = new InstructionVisitor(keyMap);
-            for (int i = 0; i < board.Height; i++)
+            InstructionVisitor? instructionVisitor = null;
+            if (mode != StartupMode.Client)
             {
-                for (int j = 0; j < board.Width; j++)
+                instructionVisitor = new InstructionVisitor(keyMap);
+                for (int i = 0; i < board.Height; i++)
                 {
-                    foreach (var item in board.GetItems(j, i))
+                    for (int j = 0; j < board.Width; j++)
                     {
-                        item.Accept(instructionVisitor);
+                        foreach (var item in board.GetItems(j, i))
+                        {
+                            item.Accept(instructionVisitor);
+                        }
                     }
                 }
+
+                view.PrintIntro(mapBuilder.RoomCount, instructionVisitor.WeaponCount, instructionVisitor.CurrencyCount, instructionVisitor.OtherCount);
+                while (Console.ReadKey(true).Key != ConsoleKey.Enter)
+                {
+                    // pusta pętla, czekamy na wciśnięcie Enter
+                }
+
+                Console.Clear();
+                Console.ForegroundColor = ConsoleColor.Yellow;
+                Console.WriteLine();
+                Console.WriteLine(theme.IntroMessage);
+                Console.ResetColor();
+                while (Console.ReadKey(true).Key != ConsoleKey.Enter)
+                {
+                    // pusta pętla, czekamy na wciśnięcie Enter
+                }
+
+                Console.Clear();
             }
 
-            view.PrintIntro(mapBuilder.RoomCount, instructionVisitor.WeaponCount, instructionVisitor.CurrencyCount, instructionVisitor.OtherCount);
-            while (Console.ReadKey(true).Key != ConsoleKey.Enter)
-            {
-                // pusta pętla, czekamy na wciśnięcie Enter
-            }
-
-            Console.Clear();
-            Console.ForegroundColor = ConsoleColor.Yellow;
-            Console.WriteLine();
-            Console.WriteLine(theme.IntroMessage);
-            Console.ResetColor();
-            while (Console.ReadKey(true).Key != ConsoleKey.Enter)
-            {
-                // pusta pętla, czekamy na wciśnięcie Enter
-            }
-
-            Console.Clear();
             while (true)
             {
+                if (mode == StartupMode.Client)
+                {
+                    if (latestState != null)
+                    {
+                        consoleView.Render(latestState);
+                    }
+
+                    ConsoleKeyInfo keyInfo = Console.ReadKey(true);
+                    controller.HandleInput(keyInfo.Key, localPlayer, board, localState);
+
+                    if (keyInfo.Key == ConsoleKey.Escape)
+                    {
+                        break;
+                    }
+
+                    continue;
+                }
+
                 if (!localPlayer.isAlive)
                 {
                     break;
@@ -137,15 +177,44 @@ namespace lab_game.infrastructure
                 List<string> currInstructions = visitor.GetInstructions(localState.IsInventoryOpen, board.Enemies.Count > 0);
                 view.Render(model, localState, currInstructions);
 
-                ConsoleKeyInfo keyInfo = Console.ReadKey(true);
-                controller.HandleInput(keyInfo.Key, localPlayer, board, localState);
+                ConsoleKeyInfo keyInfoLocal = Console.ReadKey(true);
+                controller.HandleInput(keyInfoLocal.Key, localPlayer, board, localState);
+
+                if (server != null)
+                {
+                    while (server.TryDequeueAction(out PlayerActionDto remoteAction))
+                    {
+                        if (!Enum.TryParse(remoteAction.Key, out ConsoleKey remoteKey))
+                        {
+                            continue;
+                        }
+
+                        Player remotePlayer = model.Players.FirstOrDefault(p => p.Name == remoteAction.PlayerName)
+                            ?? new Player(remoteAction.PlayerName);
+
+                        if (!model.Players.Contains(remotePlayer))
+                        {
+                            model.AddPlayer(remotePlayer);
+                        }
+
+                        if (!playerLocalStates.TryGetValue(remotePlayer.Name, out LocalModel remoteLocal))
+                        {
+                            remoteLocal = new LocalModel();
+                            playerLocalStates[remotePlayer.Name] = remoteLocal;
+                        }
+
+                        controller.HandleInput(remoteKey, remotePlayer, board, remoteLocal);
+                        server.BroadcastAction(remoteAction);
+                        server.BroadcastState();
+                    }
+                }
 
                 if (server != null)
                 {
                     PlayerActionDto action = new PlayerActionDto
                     {
                         PlayerName = localPlayer.Name,
-                        Key = keyInfo.Key.ToString()
+                        Key = keyInfoLocal.Key.ToString()
                     };
                     server.BroadcastAction(action);
                     server.BroadcastState();
@@ -157,8 +226,17 @@ namespace lab_game.infrastructure
                 }
             }
 
-            List<string> currInstructions_end = instructionVisitor.GetInstructions(localState.IsInventoryOpen, board.Enemies.Count > 0);
-            view.Render(model, localState, currInstructions_end);
+            if (mode == StartupMode.Client)
+            {
+                client?.Disconnect();
+                return;
+            }
+
+            if (instructionVisitor != null)
+            {
+                List<string> currInstructions_end = instructionVisitor.GetInstructions(localState.IsInventoryOpen, board.Enemies.Count > 0);
+                view.Render(model, localState, currInstructions_end);
+            }
 
             view.PrintOutro(logPath);
 

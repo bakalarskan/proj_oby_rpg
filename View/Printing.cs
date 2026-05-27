@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Text;
+using lab_game.dto;
 using lab_game.model;
 
 namespace lab_game.view
@@ -37,7 +38,6 @@ namespace lab_game.view
             Console.WriteLine("Naciśnij [ENTER], aby rozpocząć koszmar...");
             Console.ForegroundColor = ConsoleColor.Gray;
         }
-
         public void Render(GameModel model, LocalModel local, IReadOnlyList<string> instructions)
         {
             if (local.ShowJournalRequested)
@@ -54,6 +54,79 @@ namespace lab_game.view
             StringBuilder maze = Maze_title_com(b, p, instructions.ToList());
 
             printGame(ui, maze);
+        }
+
+        public void Render(GameModelDto dto)
+        {
+            StringBuilder ui = BuildDtoUi(dto);
+            StringBuilder maze = BuildDtoMaze(dto);
+            printGame(ui, maze);
+        }
+        private StringBuilder BuildDtoUi(GameModelDto dto)
+        {
+            StringBuilder ui = new StringBuilder();
+            ui.AppendLine("┌" + new string('─', (Base.UIWidth - 6) / 2) + "GRACZE" + new string('─', Base.UIWidth - 6 - (Base.UIWidth - 6) / 2) + "┐");
+
+            foreach (var p in dto.Players.Take(Base.InventoryLength))
+            {
+                string line = $"{p.Symbol} {p.Name} HP:{p.Health}";
+                ui.AppendLine($"│{SafePad(line, Base.UIWidth)}│");
+            }
+
+            while (ui.ToString().Split('\n').Length < Base.InventoryLength + 2)
+            {
+                ui.AppendLine($"│{SafePad(" ", Base.UIWidth)}│");
+            }
+
+            ui.AppendLine("└" + new string('─', Base.UIWidth) + "┘");
+
+            ui.AppendLine("┌" + new string('─', (Base.UIWidth - 16) / 2) + "TABLICA OGŁOSZEŃ" + new string('─', Base.UIWidth - 16 - (Base.UIWidth - 16) / 2) + "┐");
+
+            int count = 0;
+            foreach (var line in dto.EventLog.Take(Base.ComsLength))
+            {
+                ui.AppendLine($"│{SafePad(line, Base.UIWidth)}│");
+                count++;
+            }
+            for (int i = count; i < Base.ComsLength; i++)
+            {
+                ui.AppendLine($"│{SafePad(" ", Base.UIWidth)}│");
+            }
+
+            ui.AppendLine("└" + new string('─', Base.UIWidth) + "┘");
+            return ui;
+        }
+        private StringBuilder BuildDtoMaze(GameModelDto dto)
+        {
+            StringBuilder maze = new StringBuilder();
+            maze.AppendLine("┌─────────────WYDZIAŁ MiNI───────────────┐");
+
+            for (int y = 0; y < dto.Board.Height; y++)
+            {
+                maze.Append("│");
+                for (int x = 0; x < dto.Board.Width; x++)
+                {
+                    char symbol = GetDtoSymbol(dto, x, y);
+                    maze.Append(symbol);
+                }
+                maze.Append("│");
+                maze.AppendLine();
+            }
+
+            maze.AppendLine("└────────────────────────────────────────┘");
+            return maze;
+        }
+        private static char GetDtoSymbol(GameModelDto dto, int x, int y)
+        {
+            var player = dto.Players.FirstOrDefault(p => p.Position.X == x && p.Position.Y == y);
+            if (player != null) return player.Symbol;
+
+            var enemy = dto.Enemies.FirstOrDefault(e => e.Position.X == x && e.Position.Y == y);
+            if (enemy != null) return enemy.Symbol;
+
+            var tile = dto.Board.Tiles[y][x];
+            if (tile.Items.Count > 0) return tile.Items[^1].Symbol;
+            return tile.CanWalk ? ' ' : '█';
         }
 
         private void RenderJournal(IReadOnlyCollection<string> log)
