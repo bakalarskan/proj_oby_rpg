@@ -44,6 +44,20 @@ namespace lab_game.network
             }
         }
 
+        public void BroadcastState()
+        {
+            NetworkUpdateDto update = NetworkUpdateSerializer.CreateState(_model);
+            string json = NetworkUpdateSerializer.Serialize(update);
+            SendToAll(json);
+        }
+
+        public void BroadcastAction(PlayerActionDto action)
+        {
+            NetworkUpdateDto update = NetworkUpdateSerializer.CreateAction(action);
+            string json = NetworkUpdateSerializer.Serialize(update);
+            SendToAll(json);
+        }
+
         private void AcceptLoop(CancellationToken token)
         {
             while (!token.IsCancellationRequested)
@@ -60,8 +74,28 @@ namespace lab_game.network
                 }
 
                 NetworkStream stream = client.GetStream();
-                string json = GameModelSerializer.Serialize(_model);
+                NetworkUpdateDto update = NetworkUpdateSerializer.CreateState(_model);
+                string json = NetworkUpdateSerializer.Serialize(update);
                 NetworkMessage.SendJson(stream, json);
+            }
+        }
+
+        private void SendToAll(string json)
+        {
+            lock (_clients)
+            {
+                for (int i = _clients.Count - 1; i >= 0; i--)
+                {
+                    TcpClient client = _clients[i];
+                    if (!client.Connected)
+                    {
+                        _clients.RemoveAt(i);
+                        continue;
+                    }
+
+                    NetworkStream stream = client.GetStream();
+                    NetworkMessage.SendJson(stream, json);
+                }
             }
         }
     }

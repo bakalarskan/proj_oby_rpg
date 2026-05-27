@@ -1,4 +1,7 @@
-﻿using System.Net.Sockets;
+﻿using System;
+using System.Net.Sockets;
+using System.Threading;
+using System.Threading.Tasks;
 using lab_game.dto;
 
 namespace lab_game.network
@@ -21,7 +24,27 @@ namespace lab_game.network
             _client.Connect(_host, _port);
             NetworkStream stream = _client.GetStream();
             string json = NetworkMessage.ReceiveJson(stream);
-            return GameModelSerializer.Deserialize(json);
+            NetworkUpdateDto update = NetworkUpdateSerializer.Deserialize(json);
+            return update.State ?? new GameModelDto();
+        }
+
+        public void StartReceiveLoop(Action<NetworkUpdateDto> onUpdate)
+        {
+            if (_client == null)
+            {
+                throw new InvalidOperationException("Brak połączenia z serwerem.");
+            }
+
+            NetworkStream stream = _client.GetStream();
+            Task.Run(() =>
+            {
+                while (_client.Connected)
+                {
+                    string json = NetworkMessage.ReceiveJson(stream);
+                    NetworkUpdateDto update = NetworkUpdateSerializer.Deserialize(json);
+                    onUpdate(update);
+                }
+            });
         }
 
         public void Disconnect()
