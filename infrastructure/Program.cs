@@ -30,6 +30,18 @@ namespace lab_game.infrastructure
             LocalModel localState = new LocalModel();
 
             GameKeys input = new GameKeys();
+            Dictionary<string, string> keyMap = new Dictionary<string, string>
+            {
+                { "poruszanie się", input.GetKeysForDescription("poruszanie się") },
+                { "otwórz/zamknij plecak", input.GetKeysForDescription("otwórz/zamknij plecak") },
+                { "wyczyść tablicę", input.GetKeysForDescription("wyczyść tablicę") },
+                { "podnieś przedmiot", input.GetKeysForDescription("podnieś przedmiot") },
+                { "rozpocznij walkę", input.GetKeysForDescription("rozpocznij walkę") },
+                { "umieść do prawej ręki", input.GetKeysForDescription("umieść do prawej ręki") },
+                { "umieść do lewej ręki", input.GetKeysForDescription("umieść do lewej ręki") },
+                { "wyrzuć przedmiot z plecaka", input.GetKeysForDescription("wyrzuć przedmiot z plecaka") },
+                { "wybierz przedmiot", input.GetKeysForDescription("wybierz przedmiot") }
+            };
             IGameController controller = new LocalController(model, input);
 
             Console.OutputEncoding = Encoding.UTF8;
@@ -40,7 +52,7 @@ namespace lab_game.infrastructure
                 Console.SetBufferSize(100, 38);
             }
 
-            InstructionVisitor instructionVisitor = new InstructionVisitor(input);
+            InstructionVisitor instructionVisitor = new InstructionVisitor(keyMap);
             for (int i = 0; i < board.Height; i++)
             {
                 for (int j = 0; j < board.Width; j++)
@@ -76,7 +88,7 @@ namespace lab_game.infrastructure
                     break;
                 }
 
-                InstructionVisitor visitor = new InstructionVisitor(input);
+                InstructionVisitor visitor = new InstructionVisitor(keyMap);
                 for (int i = 0; i < board.Height; i++)
                 {
                     for (int j = 0; j < board.Width; j++)
