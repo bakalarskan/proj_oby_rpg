@@ -7,6 +7,7 @@ namespace lab_game.model
         public bool IsInventoryOpen { get; set; }
         public int InventoryIndex { get; set; }
         public Queue<string> UiMessages { get; } = new Queue<string>();
+        public bool ShowJournalRequested { get; set; }
 
         public void AddMessage(string message, int maxMessages = 5)
         {

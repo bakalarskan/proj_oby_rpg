@@ -141,45 +141,7 @@ namespace lab_game.controller
         public string Description => "pokaż dziennik";
         public void Execute(Player p, Board b, LocalModel local)
         {
-            IReadOnlyList<string> coms = GameLog.GetAll();
-            int pageSize = Math.Max(1, Console.WindowHeight - 5);
-            int pageCount = Math.Max(1, (int)Math.Ceiling((double)coms.Count / pageSize));
-            int currentPage = pageCount - 1;
-            while (true)
-            {
-                Console.Clear();
-                Console.ForegroundColor = ConsoleColor.Cyan;
-                Console.WriteLine("Tablica Ogłoszeń");
-                Console.ResetColor();
-                if (coms.Count == 0)
-                {
-                    Console.WriteLine("Brak nowych ogłoszeń");
-                }
-                else
-                {
-                    int start = currentPage * pageSize;
-                    int end = Math.Min(start + pageSize, coms.Count);
-                    for (int i = start; i < end; i++)
-                    {
-                        Console.WriteLine(coms[i]);
-                    }
-                }
-                Console.WriteLine();
-                Console.WriteLine($"Strona {currentPage + 1}/{pageCount}");
-                ConsoleKey key = Console.ReadKey(true).Key;
-                if (key == ConsoleKey.LeftArrow && currentPage > 0)
-                {
-                    currentPage--;
-                }
-                else if (key == ConsoleKey.RightArrow && currentPage < pageCount - 1)
-                {
-                    currentPage++;
-                }
-                else if (key == ConsoleKey.J || key == ConsoleKey.Escape)
-                {
-                    break;
-                }
-            }
+            local.ShowJournalRequested = true;
         }
     }
 }

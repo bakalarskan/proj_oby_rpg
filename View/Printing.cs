@@ -40,6 +40,13 @@ namespace lab_game.view
 
         public void Render(GameModel model, LocalModel local, IReadOnlyList<string> instructions)
         {
+            if (local.ShowJournalRequested)
+            {
+                RenderJournal(model.EventLog);
+                local.ShowJournalRequested = false;
+                return;
+            }
+
             Player p = model.LocalPlayer;
             Board b = model.Board;
 
@@ -47,6 +54,53 @@ namespace lab_game.view
             StringBuilder maze = Maze_title_com(b, p, instructions.ToList());
 
             printGame(ui, maze);
+        }
+
+        private void RenderJournal(IReadOnlyCollection<string> log)
+        {
+            List<string> coms = log.ToList();
+            int pageSize = Math.Max(1, Console.WindowHeight - 5);
+            int pageCount = Math.Max(1, (int)Math.Ceiling((double)coms.Count / pageSize));
+            int currentPage = pageCount - 1;
+
+            while (true)
+            {
+                Console.Clear();
+                Console.ForegroundColor = ConsoleColor.Cyan;
+                Console.WriteLine("Tablica Ogłoszeń");
+                Console.ResetColor();
+
+                if (coms.Count == 0)
+                {
+                    Console.WriteLine("Brak nowych ogłoszeń");
+                }
+                else
+                {
+                    int start = currentPage * pageSize;
+                    int end = Math.Min(start + pageSize, coms.Count);
+                    for (int i = start; i < end; i++)
+                    {
+                        Console.WriteLine(coms[i]);
+                    }
+                }
+
+                Console.WriteLine();
+                Console.WriteLine($"Strona {currentPage + 1}/{pageCount}");
+                ConsoleKey key = Console.ReadKey(true).Key;
+
+                if (key == ConsoleKey.LeftArrow && currentPage > 0)
+                {
+                    currentPage--;
+                }
+                else if (key == ConsoleKey.RightArrow && currentPage < pageCount - 1)
+                {
+                    currentPage++;
+                }
+                else if (key == ConsoleKey.J || key == ConsoleKey.Escape)
+                {
+                    break;
+                }
+            }
         }
 
         public void PrintOutro(string logPath)
